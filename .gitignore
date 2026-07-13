@@ -5,9 +5,6 @@ node_modules/
 dist/
 
 # Environment variables — NEVER commit these
-.env
-.env.local
-.env.production
 
 # Prisma local DB
 prisma/dev.db
@@ -25,5 +22,5 @@ pnpm-debug.log*
 Thumbs.db
 
 # Editor
-.vscode/
 .idea/
+config.bat

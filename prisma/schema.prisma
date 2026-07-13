@@ -1,0 +1,146 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                     String           @id @default(cuid())
+  email                  String           @unique
+  password               String
+  name                   String
+  role                   String           @default("USER")   // USER | ADMIN
+  balance                Float            @default(0.0)
+  isActive               Boolean          @default(true)      // soft suspend
+  isEmailVerified        Boolean          @default(false)
+  emailVerificationToken String?
+  passwordResetToken     String?
+  passwordResetExpires   DateTime?
+  phone                  String?
+  location               String?
+  currency               String           @default("USD")
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  investments            UserInvestment[]
+  transactions           Transaction[]
+  kycProfile             KycProfile?
+  paymentMethods         PaymentMethod[]
+  notifications          Notification[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+model InvestmentPlan {
+  id           String           @id @default(cuid())
+  name         String
+  description  String
+  durationDays Int
+  interestRate Float            // Annual rate e.g. 0.12 = 12%
+  minAmount    Float
+  maxAmount    Float
+  riskLevel    String           // LOW | MEDIUM | HIGH
+  active       Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  investments  UserInvestment[]
+
+  @@index([active])
+  @@index([riskLevel])
+}
+
+model UserInvestment {
+  id               String         @id @default(cuid())
+  userId           String
+  planId           String
+  amountInvested   Float
+  currentValuation Float
+  expectedReturn   Float
+  startDate        DateTime       @default(now())
+  maturityDate     DateTime
+  status           String         @default("ACTIVE") // ACTIVE | MATURED | WITHDRAWN
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             InvestmentPlan @relation(fields: [planId], references: [id])
+
+  // Performance indexes for common query patterns
+  @@index([userId])
+  @@index([status])
+  @@index([maturityDate])
+  @@index([userId, status])        // Portfolio: filter ACTIVE by user
+  @@index([status, maturityDate])  // Cron: find ACTIVE past maturityDate
+}
+
+model Transaction {
+  id                 String   @id @default(cuid())
+  userId             String
+  type               String   // DEPOSIT | WITHDRAWAL | INVESTMENT | RETURN
+  amount             Float
+  description        String
+  status             String   @default("SUCCESS") // PENDING | SUCCESS | FAILED
+  txHash             String?  @unique
+  destinationAddress String?
+  createdAt          DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, type])   // Filter ledger by transaction type
+  @@index([createdAt])      // Date-range queries and sorting
+}
+
+model KycProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  fullName        String
+  address         String
+  dateOfBirth     String   // YYYY-MM-DD
+  idNumber        String
+  idDocumentUrl   String
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model PaymentMethod {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // BANK_ACCOUNT | CARD
+  provider    String   // STRIPE | PLAID
+  last4       String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  type      String   @default("SYSTEM") // TRANSACTION | INVESTMENT | SYSTEM
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+}
